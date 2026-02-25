@@ -1,101 +1,102 @@
-# Musical Ulam Spiral
+# Musical Ulam Spiral 音乐乌拉姆螺旋
 
-An animated Ulam Spiral visualization with real-time prime number sonification. Primes are mapped to piano melodies, special prime families get unique instruments and visual markers, and each run generates a different musical style.
+一个带有实时质数音乐化的乌拉姆螺旋动画。质数被映射为钢琴旋律，特殊质数家族拥有独特的乐器和视觉标记，每次运行随机生成不同的音乐风格。
 
 ![Musical Ulam Spiral](musical_ulam_spiral.png)
 
-## Features
+## 功能特性
 
-### Visual
-- **Ulam Spiral** rendered with Python's turtle graphics on a dark background
-- Each **prime** gets a unique color (golden-ratio HSL distribution) with its number displayed inside
-- **Special prime families** highlighted with colored rings and symbols:
-  | Ring Color | Meaning | Definition |
-  |-----------|---------|------------|
-  | Gold | Twin Prime | Gap of 2 with previous prime, e.g. (11, 13) |
-  | Cyan | Cousin Prime | Gap of 4, e.g. (7, 11) |
-  | Pink | Sexy Prime | Gap of 6, e.g. (5, 11) |
-  | ◆ marker | Sophie Germain | Both p and 2p+1 are prime |
-  | ★ marker | Palindrome Prime | Reads the same forwards and backwards, e.g. 131 |
-- **Non-primes** shown as faint rings with dim numbers
-- **Stats panel** (right side) with real-time counts, ring legend, and music info
-- **Prime encyclopedia** (press `i`) with definitions and fun facts (in Chinese)
+### 视觉
 
-### Music / Sonification
+- 基于 Python turtle 的**乌拉姆螺旋**动画，深黑背景
+- 每个**质数**拥有独特颜色（黄金比例 HSL 分布），数字居中显示
+- **特殊质数家族**用彩色外框和符号标记：
+  | 外框颜色 | 含义 | 定义 |
+  |---------|------|------|
+  | 金色 | 孪生质数 Twin | 与前一个质数差为 2，如 (11, 13) |
+  | 青色 | 表兄弟质数 Cousin | 差为 4，如 (7, 11) |
+  | 粉色 | 性感质数 Sexy | 差为 6，如 (5, 11) |
+  | ◆ 符号 | Sophie Germain 安全质数 | p 和 2p+1 都是质数 |
+  | ★ 符号 | 回文质数 | 正读反读一样，如 131 |
+- **非质数**显示为极淡圆环 + 灰色数字
+- **实时统计面板**（右侧）：各类质数计数、外框图例、音乐风格信息
+- **质数百科面板**（按 `i` 键）：定义、应用、趣事
 
-Built on **FluidSynth** with the **FluidR3_GM** SoundFont (141 MB, professional GM library).
+### 音乐 / 声音化
 
-#### Instruments
-| Channel | Role | Instrument |
-|---------|------|-----------|
-| ch0 | Regular primes | Acoustic Grand Piano (GM 0) |
-| ch1 | Twin primes | Piano chord (major triad) |
-| ch2 | Cousin primes | Orchestral Harp (GM 46, fifth interval) |
-| ch3 | Sexy primes | String Ensemble (GM 48, fifth interval) |
-| ch4 | Bass pad | String Ensemble (GM 48, sustained root) |
+基于 **FluidSynth** + **FluidR3_GM** 音色库（141 MB 专业 GM 音色）。
 
-#### Melody Design
-- **Wave pattern**: notes walk up then down the scale (do-re-mi-fa-sol-la-sol-fa-mi-re-do...) for a natural, flowing melody
-- **Octave alternation**: each wave cycle alternates between C4 and C5
-- **Gentle dynamics**: velocity 30-42, extremely soft and warm
-- **Reverb**: light room (size 0.15, damping 0.8, level 0.1), no chorus
-- **Ending**: three-voice harmonic fade (piano root + harp fifth + strings third) that decays naturally
+#### 乐器分配
+| 通道 | 角色 | 乐器 |
+|------|------|------|
+| ch0 | 普通质数 | Acoustic Grand Piano（钢琴，GM 0） |
+| ch1 | 孪生质数 | 钢琴大三和弦 |
+| ch2 | 表兄弟质数 | Orchestral Harp（竖琴，五度双音） |
+| ch3 | 性感质数 | String Ensemble（弦乐，五度双音） |
+| ch4 | 低音铺底 | String Ensemble（弦乐，持续根音） |
 
-#### Style Presets (randomly chosen each run)
-| Style | Scales |
-|-------|--------|
-| Moonlight (月光) | Minor, Major |
-| Dawn (晨曦) | Major, Pentatonic |
-| Nocturne (夜想) | Minor, Dorian |
-| Pastoral (田园) | Major, Mixolydian |
-| Meditation (冥想) | Pentatonic, Minor |
+#### 旋律设计
+- **波浪式走向**：音符沿调式上行再下行（do-re-mi-fa-sol-la-sol-fa-mi-re-do...），自然流畅
+- **八度交替**：每个波浪周期在 C4 与 C5 之间切换
+- **轻柔力度**：velocity 30–42，极致温柔
+- **混响**：轻柔短尾（size 0.15, damping 0.8, level 0.1），无合唱效果
+- **结束**：三声部和声渐隐（钢琴根音 + 竖琴纯五度 + 弦乐大三度），自然衰减消散
 
-## Requirements
+#### 风格预设（每次运行随机选择）
+| 风格 | 可选调式 |
+|------|---------|
+| 月光 | 小调、大调 |
+| 晨曦 | 大调、五声音阶 |
+| 夜想 | 小调、多利亚 |
+| 田园 | 大调、混合吕底亚 |
+| 冥想 | 五声音阶、小调 |
+
+## 环境要求
 
 - Python >= 3.14
-- [FluidSynth](https://www.fluidsynth.org/) (`brew install fluid-synth`)
-- [FluidR3_GM.sf2](https://member.keymusician.com/Member/FluidR3_GM/) — place in the project root
+- [FluidSynth](https://www.fluidsynth.org/)（`brew install fluid-synth`）
+- [FluidR3_GM.sf2](https://member.keymusician.com/Member/FluidR3_GM/) — 放置在项目根目录
 
 ```bash
 pip install pygame-ce pyfluidsynth
 ```
 
-Or with [uv](https://docs.astral.sh/uv/):
+或使用 [uv](https://docs.astral.sh/uv/)：
 ```bash
 uv sync
 ```
 
-## Usage
+## 使用方法
 
 ```bash
-# Default: 500 numbers, medium window, no sound
+# 默认：500 个数字，中等窗口，无声音
 python ulam_spiral_mr_zou.py
 
-# With music
+# 开启音乐
 python ulam_spiral_mr_zou.py --sound
 
-# Start paused (press Space to begin)
+# 以暂停状态启动（按空格开始）
 python ulam_spiral_mr_zou.py --sound --paused
 
-# Custom count and window size
+# 自定义数量和窗口大小
 python ulam_spiral_mr_zou.py 800 --size large --sound
 
-# Start from a different number
+# 从指定数字开始
 python ulam_spiral_mr_zou.py --start 1000 --sound
 ```
 
-### Keyboard Controls
-| Key | Action |
-|-----|--------|
-| `Space` | Pause / Resume |
-| `i` | Toggle prime encyclopedia panel |
-| `q` / `Esc` | Quit (while paused) |
+### 快捷键
+| 按键 | 功能 |
+|------|------|
+| `Space` | 暂停 / 继续 |
+| `i` | 展开 / 收起质数百科 |
+| `q` / `Esc` | 退出（暂停时） |
 
-### CLI Options
-| Option | Description | Default |
-|--------|-------------|---------|
-| `count` | Number of integers to draw | 200/500/1200 by size |
-| `--size` | Window size: `small`, `mid`, `large` | `mid` |
-| `--start` | Starting integer | 1 |
-| `--sound` | Enable music | off |
-| `--paused` | Start in paused state | off |
+### 命令行参数
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `count` | 绘制的数字数量 | small=200, mid=500, large=1200 |
+| `--size` | 窗口尺寸：`small`、`mid`、`large` | `mid` |
+| `--start` | 起始数字 | 1 |
+| `--sound` | 开启音乐 | 关闭 |
+| `--paused` | 以暂停状态启动 | 关闭 |
