@@ -1,5 +1,7 @@
+import colorsys
 import math
 import os
+import random
 import sys
 import time
 import turtle
@@ -208,7 +210,7 @@ def get_spiral_position(index):
     return (x, y)
 
 
-def draw_ulam_spiral(total_numbers=None, size="mid", start_num=1, sound=False, paused=False):
+def draw_ulam_spiral(total_numbers=None, size="mid", start_num=1, sound=False, paused=False, fireworks=False):
     """绘制乌拉姆螺旋 - 质数用不同颜色表示
 
     Args:
@@ -673,26 +675,772 @@ def draw_ulam_spiral(total_numbers=None, size="mid", start_num=1, sound=False, p
         if state["quit"]:
             break
 
-    # 渐弱尾声
-    if synth and not state["quit"]:
-        # 先关闭旋律，只留低音
+    # --- 烟花尾声 ---
+    def _get_divisors(n):
+        """获取 n 的所有约数"""
+        divs = []
+        for i in range(1, int(math.sqrt(n)) + 1):
+            if n % i == 0:
+                divs.append(i)
+                if i != n // i:
+                    divs.append(n // i)
+        divs.sort()
+        return divs
+
+    def _do_fireworks_finale():
+        """烟花尾声：数字放大→火箭升空→约数分裂→烟花爆炸"""
+        last_num = start_num + total_numbers - 1
+        divisors = _get_divisors(last_num)
+
+        _silence_all()
+
+        fw_t = turtle.Turtle()
+        fw_t.speed(0)
+        fw_t.hideturtle()
+        fw_t.penup()
+
+        # 约数显示用的独立 turtle
+        div_t = turtle.Turtle()
+        div_t.speed(0)
+        div_t.hideturtle()
+        div_t.penup()
+
+        t.clear()
+        stats_t.clear()
+        info_t.clear()
+
+        scale_len = len(note_map[0]) if note_map else 6
+        half_h = height // 2
+        rocket_top = half_h - 80  # 火箭到达的顶部位置
+
+        # === Phase A1: Zoom (~1s) — 数字在中心放大 ===
+        for step in range(20):
+            if state["quit"]:
+                break
+            fw_t.clear()
+            fsize = 12 + int(step * 4)  # 12pt → ~92pt
+            hue = (step * 0.04) % 1.0
+            r, g, b = colorsys.hls_to_rgb(hue, 0.7, 1.0)
+            glow = '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
+            fw_t.goto(0, -fsize * 0.4)
+            fw_t.color(glow)
+            fw_t.write(str(last_num), align="center", font=("Arial", fsize, "bold"))
+
+            # 蓄力音：低音弦乐渐强 + 钢琴低音震音
+            if synth and note_map:
+                if step == 0:
+                    # 低沉弦乐铺底（蓄力感）
+                    synth.noteon(3, note_map[0][0] - 12, 25)
+                    synth.noteon(4, note_map[0][0] - 24, 20)
+                if step % 3 == 0:
+                    # 钢琴低音震音，渐强
+                    idx = (step // 3) % scale_len
+                    vel = min(20 + step * 2, 55)
+                    synth.noteon(0, note_map[0][idx], vel)
+                    if step >= 3:
+                        prev_idx = ((step // 3) - 1) % scale_len
+                        synth.noteoff(0, note_map[0][prev_idx])
+
+            screen.update()
+            time.sleep(0.05)
+
+        if state["quit"]:
+            fw_t.clear()
+            if synth:
+                _silence_all()
+                synth.delete()
+            return
+
+        # === Phase A2: Rocket (~1.5s) — 数字向上飞升 ===
+        rocket_fsize = 92
+        rocket_y = 0.0
+        rocket_vy = 2.0  # 初速度，逐帧加速
+
+        for step in range(40):
+            if state["quit"]:
+                break
+            fw_t.clear()
+
+            # 加速上升
+            rocket_vy += 0.6
+            rocket_y += rocket_vy
+            if rocket_y > rocket_top:
+                rocket_y = rocket_top
+
+            # 火箭尾焰：在数字下方画几个渐小渐暗的圆点
+            trail_colors = ["#ff6600", "#ff3300", "#ff0000", "#cc0000", "#880000"]
+            for ti, tc in enumerate(trail_colors):
+                trail_y = rocket_y - rocket_fsize * 0.5 - (ti + 1) * 18
+                trail_sz = max(2, 14 - ti * 2) + random.randint(-2, 2)
+                fw_t.goto(random.uniform(-8, 8), trail_y)
+                fw_t.dot(max(1, trail_sz), tc)
+
+            # 数字本体（发光色渐变为白色）
+            bright = min(1.0, 0.6 + step * 0.01)
+            hue = (0.08 + step * 0.005) % 1.0
+            r, g, b = colorsys.hls_to_rgb(hue, bright, 1.0)
+            glow = '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
+            fw_t.goto(0, rocket_y - rocket_fsize * 0.4)
+            fw_t.color(glow)
+            fw_t.write(str(last_num), align="center", font=("Arial", rocket_fsize, "bold"))
+
+            # 火箭升空音：快速上行滑音 + 竖琴颤音 + 弦乐渐强
+            if synth and note_map:
+                if step == 0:
+                    # 关闭蓄力音
+                    synth.noteoff(3, note_map[0][0] - 12)
+                    synth.noteoff(4, note_map[0][0] - 24)
+                # 钢琴快速上行（每帧换音，模拟呼啸）
+                if step % 2 == 0:
+                    idx = (step // 2) % scale_len
+                    octave = min(step // 10, 1)
+                    vel = min(45 + step, 80)
+                    synth.noteon(0, note_map[octave][idx], vel)
+                    if step >= 2:
+                        prev_idx = ((step // 2) - 1) % scale_len
+                        prev_oct = min((step - 2) // 10, 1)
+                        synth.noteoff(0, note_map[prev_oct][prev_idx])
+                # 竖琴高音颤音（模拟火箭尾焰噼啪）
+                if step % 3 == 0:
+                    h_idx = (step // 3) % scale_len
+                    h_midi = min(note_map[1][h_idx] + 12, 108)
+                    synth.noteon(2, h_midi, random.randint(30, 55))
+                    if step >= 3:
+                        prev_h = min(note_map[1][((step // 3) - 1) % scale_len] + 12, 108)
+                        synth.noteoff(2, prev_h)
+                # 弦乐持续渐强（推进感）
+                if step == 5:
+                    synth.noteon(3, note_map[0][0], 30)
+                    synth.noteon(3, note_map[0][0] + 7, 25)
+                elif step == 20:
+                    synth.noteon(4, note_map[1][0], 40)
+                    synth.noteon(4, note_map[1][0] + 7, 35)
+
+            screen.update()
+            time.sleep(0.038)
+
+            if rocket_y >= rocket_top:
+                break
+
+        if state["quit"]:
+            fw_t.clear()
+            if synth:
+                _silence_all()
+                synth.delete()
+            return
+
+        # === Phase A3: Split (~2s) — 约数分裂并坠落 ===
+        fw_t.clear()
+
+        # 分裂音效：先全部静音，然后一个大爆裂和弦
+        if synth and note_map:
+            for ch in range(5):
+                for oct_i in range(2):
+                    for n_idx in range(len(note_map[oct_i])):
+                        synth.noteoff(ch, note_map[oct_i][n_idx])
+                for extra in [-24, -12, 12, 19, 24]:
+                    synth.noteoff(ch, note_map[0][0] + extra)
+            root = note_map[0][0]
+            # 爆裂和弦：钢琴猛击 + 竖琴碎裂 + 弦乐震撼
+            synth.noteon(0, root, 80)           # 钢琴根音重击
+            synth.noteon(0, root + 12, 75)      # 钢琴高八度
+            synth.noteon(2, root + 16, 70)      # 竖琴高音
+            synth.noteon(2, root + 19, 65)      # 竖琴更高
+            synth.noteon(3, root + 7, 70)       # 弦乐五度
+            synth.noteon(4, root - 12, 60)      # 低音弦乐
+
+        # 为每个约数分配初始位置（从顶部散开）
+        div_objects = []
+        spread = min(600, len(divisors) * 50)
+        for i, d in enumerate(divisors):
+            # 均匀水平分布
+            x_offset = -spread / 2 + (i / max(1, len(divisors) - 1)) * spread if len(divisors) > 1 else 0
+            hue = (i * 0.618) % 1.0
+            r, g, b = colorsys.hls_to_rgb(hue, 0.65, 0.9)
+            c = '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
+            div_objects.append({
+                'num': d,
+                'x': x_offset,
+                'y': rocket_top,
+                'vx': random.uniform(-1.5, 1.5),
+                'vy': random.uniform(1, 4),  # 初始微弱上抛
+                'color': c,
+                'fsize': max(10, min(28, 60 // max(1, len(str(d))))),
+                'alive': True,
+            })
+
+        # 约数坠落动画
+        ground_y = -half_h + 60
+        for frame in range(70):  # ~2.3s
+            if state["quit"]:
+                break
+            div_t.clear()
+            any_alive = False
+            for dobj in div_objects:
+                if not dobj['alive']:
+                    continue
+                any_alive = True
+                dobj['vy'] -= 0.35  # 重力
+                dobj['x'] += dobj['vx']
+                dobj['y'] += dobj['vy']
+
+                # 落到底部后停止
+                if dobj['y'] < ground_y:
+                    dobj['y'] = ground_y
+                    dobj['vy'] = 0
+                    dobj['vx'] = 0
+
+                div_t.goto(dobj['x'], dobj['y'])
+                div_t.color(dobj['color'])
+                div_t.write(str(dobj['num']), align="center",
+                            font=("Arial", dobj['fsize'], "bold"))
+
+            # 约数坠落音效：下行琶音 + 落地时叮咚
+            if synth and note_map:
+                # 持续下行钢琴音（碎片散落感）
+                if frame % 4 == 0:
+                    d_idx = (scale_len - 1 - (frame // 4) % scale_len)
+                    d_oct = 1 if frame < 30 else 0
+                    d_midi = note_map[d_oct][d_idx]
+                    synth.noteon(0, d_midi, max(55 - frame // 2, 18))
+                # 竖琴叮咚（模拟碎片着地）
+                if frame % 6 == 0:
+                    h_idx = (frame // 6) % scale_len
+                    h_midi = min(note_map[1][h_idx] + 12, 108)
+                    synth.noteon(2, h_midi, max(50 - frame // 2, 20))
+                # 关闭分裂和弦（渐退）
+                if frame == 15:
+                    root = note_map[0][0]
+                    for ch, offset in [(0, 0), (0, 12), (2, 16), (2, 19), (3, 7), (4, -12)]:
+                        synth.noteoff(ch, root + offset)
+
+            screen.update()
+            time.sleep(0.033)
+            if not any_alive:
+                break
+
+        # 短暂停顿，展示约数
+        time.sleep(0.5)
+
+        if state["quit"]:
+            fw_t.clear()
+            div_t.clear()
+            if synth:
+                _silence_all()
+                synth.delete()
+            return
+
+        # 将约数和原数转为五颜六色的漂浮球体
+        floaters = []
+        half_w = width // 2
+
+        def _rand_bright_color():
+            """生成随机鲜艳颜色"""
+            h = random.random()
+            s = random.uniform(0.8, 1.0)
+            l = random.uniform(0.55, 0.7)
+            r, g, b = colorsys.hls_to_rgb(h, l, s)
+            return '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
+
+        # 原数（大号，居中偏上，鲜艳随机色）
+        floaters.append({
+            'text': str(last_num), 'x': 0.0, 'y': 80.0,
+            'vx': random.uniform(-0.3, 0.3), 'vy': random.uniform(-0.2, 0.2),
+            'fsize': 48,
+            'color': _rand_bright_color(),
+            'phase': random.uniform(0, 2 * math.pi),
+            'freq': random.uniform(0.03, 0.06),
+            'amp_x': random.uniform(0.4, 0.8),
+            'amp_y': random.uniform(0.3, 0.6),
+        })
+        # 约数散布（每个都是不同的鲜艳色）
+        for i, dobj in enumerate(div_objects):
+            floaters.append({
+                'text': str(dobj['num']),
+                'x': dobj['x'],
+                'y': random.uniform(-half_h * 0.4, half_h * 0.5),
+                'vx': random.uniform(-0.5, 0.5),
+                'vy': random.uniform(-0.3, 0.3),
+                'fsize': dobj['fsize'],
+                'color': _rand_bright_color(),
+                'phase': random.uniform(0, 2 * math.pi),
+                'freq': random.uniform(0.02, 0.07),
+                'amp_x': random.uniform(0.3, 0.9),
+                'amp_y': random.uniform(0.3, 0.7),
+            })
+
+        # === Phase B: Fireworks — 多波次粒子爆炸 ===
+        fw_t.clear()
+        div_t.clear()
+
+        # 静音过渡，为烟花腾出声道
+        if synth and note_map:
+            for ch in range(5):
+                for oct_i in range(2):
+                    for n_idx in range(len(note_map[oct_i])):
+                        synth.noteoff(ch, note_map[oct_i][n_idx])
+                for extra in [-24, -12, 12, 16, 19, 24]:
+                    synth.noteoff(ch, note_map[0][0] + extra)
+
+        # 9波次烟花配置，层次分明，第9波火树银花大结局
+        # (发射帧, 中心x, 中心y, 粒子数, 速度范围, 尺寸范围, 色相偏移)
+        wave_configs = [
+            # Wave 1: 开场中心爆破（金色）
+            (0,    0,   50,   70, (5, 14), (6, 16), 0.12),
+            # Wave 2: 左侧红色花束
+            (20, -220,  120,  55, (4, 12), (5, 14), 0.0),
+            # Wave 3: 右侧蓝紫瀑布
+            (35,  220,  130,  55, (4, 13), (5, 14), 0.7),
+            # Wave 4: 双侧对称绿色
+            (50, -160,  -30,  40, (3, 11), (4, 12), 0.33),
+            (50,  160,  -30,  40, (3, 11), (4, 12), 0.33),
+            # Wave 5: 高空粉色瀑布
+            (65,    0,  200,  60, (5, 15), (6, 16), 0.9),
+            # Wave 6: 三点同时（橙 + 青 + 紫）
+            (80, -250,   60,  35, (3, 10), (4, 11), 0.08),
+            (80,    0, -100,  35, (3, 10), (4, 11), 0.5),
+            (80,  250,   60,  35, (3, 10), (4, 11), 0.78),
+            # Wave 7: 宽幅银色瀑布
+            (95, -100,  180,  50, (4, 12), (5, 14), 0.15),
+            (95,  100,  180,  50, (4, 12), (5, 14), 0.15),
+            # Wave 8: 四角齐放（彩虹色）
+            (110, -280,  160, 40, (4, 11), (5, 13), 0.0),
+            (110,  280,  160, 40, (4, 11), (5, 13), 0.25),
+            (110, -280, -100, 40, (4, 11), (5, 13), 0.5),
+            (110,  280, -100, 40, (4, 11), (5, 13), 0.75),
+            # Wave 9: 火树银花大结局！！！ 全屏多点超大爆炸
+            (130,    0,    0, 120, (8, 22), (10, 24), 0.0),
+            (130, -200,  100,  80, (6, 18), (8, 20), 0.15),
+            (130,  200,  100,  80, (6, 18), (8, 20), 0.3),
+            (130, -150, -80,   80, (6, 18), (8, 20), 0.5),
+            (130,  150, -80,   80, (6, 18), (8, 20), 0.65),
+            (130,    0,  200,  80, (6, 18), (8, 20), 0.85),
+            (133, -300,    0,  60, (5, 16), (7, 18), 0.1),
+            (133,  300,    0,  60, (5, 16), (7, 18), 0.4),
+            (133,    0, -160,  60, (5, 16), (7, 18), 0.7),
+            (136, -100,  250,  50, (5, 15), (6, 16), 0.2),
+            (136,  100,  250,  50, (5, 15), (6, 16), 0.55),
+            (136, -100, -200,  50, (5, 15), (6, 16), 0.9),
+            (136,  100, -200,  50, (5, 15), (6, 16), 0.45),
+        ]
+
+        # 为每个波次预生成爆炸和弦（不同音高，模拟远近不同的烟花）
+        wave_chords = []
+        if note_map:
+            for i, wc in enumerate(wave_configs):
+                w_root_idx = (i * 2) % scale_len
+                w_oct = i % 2
+                w_root = note_map[w_oct][w_root_idx]
+                wave_chords.append(w_root)
+        # 第一波次立刻起爆
+        if synth and note_map and wave_chords:
+            root = wave_chords[0]
+            synth.noteon(0, root, 80)
+            synth.noteon(0, root + 12, 70)
+            synth.noteon(3, root + 7, 75)
+            synth.noteon(2, root + 4, 65)
+
+        # 预生成所有波次的粒子
+        particles = []
+        for spawn_frame, cx, cy, count, (spd_lo, spd_hi), (sz_lo, sz_hi), hue_off in wave_configs:
+            for _ in range(count):
+                angle = random.uniform(0, 2 * math.pi)
+                speed = random.uniform(spd_lo, spd_hi)
+                hue = (hue_off + random.uniform(-0.12, 0.12)) % 1.0
+                r, g, b = colorsys.hls_to_rgb(hue, 0.65, random.uniform(0.8, 1.0))
+                c = '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
+                particles.append({
+                    'x': float(cx), 'y': float(cy),
+                    'vx': math.cos(angle) * speed,
+                    'vy': math.sin(angle) * speed,
+                    'color': c,
+                    'size': random.uniform(sz_lo, sz_hi),
+                    'spawn': spawn_frame,
+                    'active': False,
+                })
+
+        sparkle_step = 0
+        for frame in range(200):  # ~6.6s at 33ms/frame (9 waves)
+            if state["quit"]:
+                break
+            fw_t.clear()
+            div_t.clear()
+
+            # 激活本帧该出现的粒子
+            for p in particles:
+                if not p['active'] and frame >= p['spawn']:
+                    p['active'] = True
+
+            alive = False
+            for p in particles:
+                if not p['active'] or p['size'] < 1:
+                    continue
+                alive = True
+                p['x'] += p['vx']
+                p['y'] += p['vy']
+                p['vy'] -= 0.12  # 轻重力，让粒子飞更远
+                p['vx'] *= 0.995  # 微弱空气阻力
+                p['size'] -= 0.12
+                fw_t.goto(p['x'], p['y'])
+                fw_t.dot(max(1, int(p['size'])), p['color'])
+
+            # 漂浮的数字（原数 + 约数）
+            bound_x = half_w - 80
+            bound_y = half_h - 60
+            for fl in floaters:
+                # 正弦漂浮 + 缓慢漂移
+                fl['x'] += fl['vx'] + math.sin(frame * fl['freq'] + fl['phase']) * fl['amp_x']
+                fl['y'] += fl['vy'] + math.cos(frame * fl['freq'] * 0.7 + fl['phase']) * fl['amp_y']
+                # 柔性边界反弹
+                if fl['x'] > bound_x:
+                    fl['vx'] = -abs(fl['vx']) - 0.1
+                elif fl['x'] < -bound_x:
+                    fl['vx'] = abs(fl['vx']) + 0.1
+                if fl['y'] > bound_y:
+                    fl['vy'] = -abs(fl['vy']) - 0.1
+                elif fl['y'] < -bound_y:
+                    fl['vy'] = abs(fl['vy']) + 0.1
+                # 速度衰减，保持温柔
+                fl['vx'] *= 0.98
+                fl['vy'] *= 0.98
+                div_t.goto(fl['x'], fl['y'] - fl['fsize'] * 0.4)
+                div_t.color(fl['color'])
+                div_t.write(fl['text'], align="center",
+                            font=("Arial", fl['fsize'], "bold"))
+
+            # === 烟花音效引擎 ===
+            if synth and note_map:
+                wave_frames = {w[0]: wi for wi, w in enumerate(wave_configs)}
+
+                # --- 每波爆炸：多乐器猛击和弦 ---
+                if frame in wave_frames and frame > 0:
+                    wi = wave_frames[frame]
+                    if wi < len(wave_chords):
+                        wr = wave_chords[wi]
+                        # 先关闭上一波残留
+                        if wi > 0 and wi - 1 < len(wave_chords):
+                            prev_r = wave_chords[wi - 1]
+                            for ch, off in [(0, 0), (0, 12), (3, 7), (2, 4)]:
+                                synth.noteoff(ch, prev_r + off)
+                        # 爆炸和弦（每波不同音高 = 不同烟花）
+                        boom_vel = random.randint(60, 80)
+                        synth.noteon(0, wr, boom_vel)            # 钢琴重击
+                        synth.noteon(0, wr + 12, boom_vel - 10)  # 高八度
+                        synth.noteon(3, wr + 7, boom_vel - 5)    # 弦乐五度
+                        synth.noteon(2, wr + 4, boom_vel - 15)   # 竖琴三度
+
+                # --- 噼啪碎裂音：快速随机高音钢琴 ---
+                if frame % 2 == 0:
+                    crackle_note = random.randint(84, 102)  # C6-F#7 高音区
+                    crackle_vel = random.randint(20, 45)
+                    crackle_ch = random.choice([0, 1])
+                    synth.noteon(crackle_ch, crackle_note, crackle_vel)
+                    # 极短音，快速释放（2帧后关闭）
+                    if frame >= 2:
+                        synth.noteoff(crackle_ch, random.randint(84, 102))
+
+                # --- 闪烁竖琴琶音：下行 + 上行交替 ---
+                if frame % 5 == 0 and sparkle_step < 20:
+                    if sparkle_step % 2 == 0:
+                        s_idx = (scale_len - 1 - (sparkle_step // 2) % scale_len)
+                    else:
+                        s_idx = (sparkle_step // 2) % scale_len
+                    s_oct = 1 if sparkle_step < 10 else 0
+                    s_midi = min(note_map[s_oct][s_idx] + 12, 108)
+                    s_vel = max(60 - sparkle_step * 2, 22)
+                    synth.noteon(2, s_midi, s_vel)
+                    sparkle_step += 1
+
+                # --- 弦乐波浪铺底：缓慢起伏 ---
+                if frame == 0:
+                    synth.noteon(4, note_map[0][0] - 12, 25)
+                elif frame == 50:
+                    synth.noteoff(4, note_map[0][0] - 12)
+                    synth.noteon(4, note_map[0][0] - 5, 30)
+                elif frame == 100:
+                    synth.noteoff(4, note_map[0][0] - 5)
+                    synth.noteon(4, note_map[0][0], 35)
+                # Wave 9 大结局：全声道齐奏加强
+                elif frame == 130:
+                    synth.noteoff(4, note_map[0][0])
+                    synth.noteon(4, note_map[0][0] - 12, 45)
+                    synth.noteon(4, note_map[0][0] - 5, 40)
+
+            screen.update()
+            time.sleep(0.033)
+            if not alive and frame > 160:
+                break
+
+        # Phase C: 祝福语飘过 + 数字球缓缓漂浮
+        fw_t.clear()
+
+        if synth and note_map:
+            # 全部静音
+            for ch in range(5):
+                for midi_n in range(21, 109):
+                    synth.noteoff(ch, midi_n)
+
+        # 祝福语 turtle
+        bless_t = turtle.Turtle()
+        bless_t.speed(0)
+        bless_t.hideturtle()
+        bless_t.penup()
+
+        # 祝福语库（带 Emoji 装饰）
+        blessings = [
+            f"\u2728\U0001f389  祝福您！愿 {last_num} 为您带来无尽好运！ \U0001f389\u2728",
+            f"\U0001f31f\U0001f680  数字 {last_num} 闪耀着光芒，愿它照亮您前行的路！ \U0001f680\U0001f31f",
+            f"\U0001f386\U0001f3b6  在 {last_num} 的祝福下，愿您心想事成，万事如意！ \U0001f3b6\U0001f386",
+            f"\U0001f340\U0001f48e  让 {last_num} 成为您的幸运数字，愿幸福与您常伴！ \U0001f48e\U0001f340",
+            f"\u2b50\U0001f387  质数之美，{last_num} 之光，愿好运永远眷顾您！ \U0001f387\u2b50",
+            f"\U0001f320\U0001f496  愿 {last_num} 带来满天星辰般的幸福与温暖！ \U0001f496\U0001f320",
+            f"\U0001f386\U0001f38a  {last_num} 为您绽放烟花，愿新的旅程精彩纷呈！ \U0001f38a\U0001f386",
+            f"\U0001f9e8\u2728  数学之美如烟花般绚烂，愿 {last_num} 为您带来惊喜！ \u2728\U0001f9e8",
+        ]
+        blessing = random.choice(blessings)
+        bless_fsize = 32
+
+        # 让数字球沉到下半屏慢慢漂浮
+        for fl in floaters:
+            fl['y'] = random.uniform(-half_h * 0.6, -half_h * 0.1)
+            fl['vx'] = random.uniform(-0.3, 0.3)
+            fl['vy'] = random.uniform(-0.15, 0.15)
+
+        # 祝福语动画：缓缓从右飘到左，再缓缓返回中心定格
+        bless_start_x = half_w + 500
+        bless_end_x = -half_w - 500
+        bless_y = 70
+        total_scroll = bless_end_x - bless_start_x
+        bound_x = half_w - 80
+        bound_y_fl = half_h - 60
+
+        # 横幅伴奏：缓慢音阶行走序列
+        banner_melody = []
+        if note_map:
+            for oct in range(2):
+                for idx in range(len(note_map[oct])):
+                    banner_melody.append(note_map[oct][idx])
+            for oct in range(1, -1, -1):
+                for idx in range(len(note_map[oct]) - 1, -1, -1):
+                    banner_melody.append(note_map[oct][idx])
+
+        # 横幅周围漂浮的装饰星星粒子
+        banner_stars = []
+        for _ in range(20):
+            banner_stars.append({
+                'ox': random.uniform(-320, 320),   # 相对横幅中心的偏移
+                'oy': random.uniform(-50, 70),
+                'phase': random.uniform(0, 2 * math.pi),
+                'freq': random.uniform(0.04, 0.1),
+                'amp': random.uniform(5, 20),
+                'char': random.choice(['\u2726', '\u2727', '\u2728', '\u2729', '\u2735', '\u2734', '\u00b7', '\u2022']),
+                'size': random.randint(8, 16),
+                'hue_off': random.random(),
+            })
+
+        # 装饰图案序列（上下交替变化）
+        deco_chars_pool = [
+            '\u2500\u2500 \u2726\u2727\u2726 \u2500\u2500',
+            '\u2500\u2500 \u2734\u2735\u2734 \u2500\u2500',
+            '\u2500\u2500 \u00b7\u2022\u00b7\u2022\u00b7 \u2500\u2500',
+            '\u2500\u2500 \u2729\u2728\u2729 \u2500\u2500',
+            '\u2500\u2500 \u2736\u2737\u2736 \u2500\u2500',
+        ]
+
+        def _draw_banner(bx, bf_idx):
+            """绘制带动态装饰的横幅"""
+            # 主文字彩虹渐变
+            bh = (bf_idx * 0.005) % 1.0
+            br, bg_, bb = colorsys.hls_to_rgb(bh, 0.72, 1.0)
+            bcol = '#{:02x}{:02x}{:02x}'.format(int(br * 255), int(bg_ * 255), int(bb * 255))
+            # 装饰色（互补色相）
+            dh = (bh + 0.35) % 1.0
+            dr, dg, db = colorsys.hls_to_rgb(dh, 0.6, 0.85)
+            dcol = '#{:02x}{:02x}{:02x}'.format(int(dr * 255), int(dg * 255), int(db * 255))
+
+            # 上装饰线（动态轮换图案）
+            deco_idx = (bf_idx // 30) % len(deco_chars_pool)
+            deco_line = deco_chars_pool[deco_idx]
+            bless_t.goto(bx, bless_y + bless_fsize + 12)
+            bless_t.color(dcol)
+            bless_t.write(deco_line, align="center", font=(PANEL_FONT, 14, "normal"))
+
+            # 主祝福语
+            bless_t.goto(bx, bless_y)
+            bless_t.color(bcol)
+            bless_t.write(blessing, align="center", font=(PANEL_FONT, bless_fsize, "bold"))
+
+            # 下装饰线（与上不同图案）
+            deco_idx2 = (deco_idx + 2) % len(deco_chars_pool)
+            deco_line2 = deco_chars_pool[deco_idx2]
+            bless_t.goto(bx, bless_y - 18)
+            bless_t.color(dcol)
+            bless_t.write(deco_line2, align="center", font=(PANEL_FONT, 14, "normal"))
+
+            # 漂浮装饰星星
+            for star in banner_stars:
+                sx = bx + star['ox'] + math.sin(bf_idx * star['freq'] + star['phase']) * star['amp']
+                sy = bless_y + star['oy'] + math.cos(bf_idx * star['freq'] * 0.8 + star['phase']) * star['amp'] * 0.6
+                # 星星闪烁：亮度随时间正弦波动
+                twinkle = 0.5 + 0.5 * math.sin(bf_idx * star['freq'] * 2 + star['phase'])
+                sh = (star['hue_off'] + bf_idx * 0.003) % 1.0
+                sl = 0.45 + twinkle * 0.35
+                sr, sg, sb = colorsys.hls_to_rgb(sh, sl, 0.9)
+                scol = '#{:02x}{:02x}{:02x}'.format(int(sr * 255), int(sg * 255), int(sb * 255))
+                bless_t.goto(sx, sy)
+                bless_t.color(scol)
+                bless_t.write(star['char'], align="center", font=("Arial", star['size'], "normal"))
+
+        def _draw_floaters(bf_idx, amp_scale=1.0):
+            """绘制漂浮的数字球"""
+            for fl in floaters:
+                fl['x'] += fl['vx'] + math.sin(bf_idx * fl['freq'] + fl['phase']) * fl['amp_x'] * 0.5 * amp_scale
+                fl['y'] += fl['vy'] + math.cos(bf_idx * fl['freq'] * 0.7 + fl['phase']) * fl['amp_y'] * 0.3 * amp_scale
+                if fl['x'] > bound_x:
+                    fl['vx'] = -abs(fl['vx']) - 0.05
+                elif fl['x'] < -bound_x:
+                    fl['vx'] = abs(fl['vx']) + 0.05
+                if fl['y'] > -half_h * 0.05:
+                    fl['vy'] = -abs(fl['vy']) - 0.03
+                elif fl['y'] < -bound_y_fl:
+                    fl['vy'] = abs(fl['vy']) + 0.03
+                fl['vx'] *= 0.99
+                fl['vy'] *= 0.99
+                div_t.goto(fl['x'], fl['y'] - fl['fsize'] * 0.4)
+                div_t.color(fl['color'])
+                div_t.write(fl['text'], align="center",
+                            font=("Arial", fl['fsize'], "bold"))
+
+        def _play_banner_music(bf_idx, melody_idx_ref):
+            """横幅伴奏：钢琴缓慢旋律 + 竖琴点缀 + 弦乐铺底"""
+            if not synth or not note_map or not banner_melody:
+                return
+            mel_len = len(banner_melody)
+            # 钢琴缓慢旋律（每16帧一个音 ≈ 每1s）
+            if bf_idx % 16 == 0:
+                mi = melody_idx_ref[0] % mel_len
+                midi = banner_melody[mi]
+                synth.noteon(0, midi, 32)
+                prev_mi = (melody_idx_ref[0] - 1) % mel_len
+                synth.noteoff(0, banner_melody[prev_mi])
+                melody_idx_ref[0] += 1
+            # 竖琴点缀（每24帧 ≈ 每1.4s，错开钢琴）
+            if bf_idx % 24 == 12:
+                hi = melody_idx_ref[0] % mel_len
+                h_midi = min(banner_melody[hi] + 12, 108)
+                synth.noteon(2, h_midi, 22)
+                prev_hi = (hi - 1) % mel_len
+                synth.noteoff(2, min(banner_melody[prev_hi] + 12, 108))
+            # 弦乐铺底：每80帧换根音（~4.8s）
+            if bf_idx % 80 == 0:
+                bass_root = banner_melody[melody_idx_ref[0] % mel_len] - 12
+                synth.noteon(3, max(bass_root, 36), 16)
+                synth.noteon(4, max(bass_root + 7, 36), 12)
+
+        # 伴奏起始：弦乐铺底
+        melody_idx = [0]
+        if synth and note_map:
+            root = note_map[0][0]
+            synth.noteon(3, root, 20)
+            synth.noteon(4, root + 7, 15)
+
+        # Phase C1: 从右边缓缓飘到左边
+        # 横幅完全可见时大幅减速，减少闪眼
+        for bf in range(200):
+            if state["quit"]:
+                break
+            bless_t.clear()
+            div_t.clear()
+
+            # 正弦缓动
+            progress = bf / 199.0
+            ease = 0.5 - 0.5 * math.cos(progress * math.pi)
+            bx = bless_start_x + total_scroll * ease
+
+            _draw_banner(bx, bf)
+            _draw_floaters(bf)
+            _play_banner_music(bf, melody_idx)
+
+            screen.update()
+            # 横幅在屏幕内时帧间隔拉长（更慢更柔和）
+            if -half_w * 0.6 < bx < half_w * 0.6:
+                time.sleep(0.10)
+            elif -half_w < bx < half_w:
+                time.sleep(0.08)
+            else:
+                time.sleep(0.055)
+
+        # Phase C2: 从左边缓缓返回中心
+        return_start_x = bless_end_x
+        return_end_x = 0.0
+        for bf in range(120):
+            if state["quit"]:
+                break
+            bless_t.clear()
+            div_t.clear()
+
+            # 减速缓入（ease-out quartic）
+            progress = bf / 119.0
+            ease = 1.0 - (1.0 - progress) ** 4
+            bx = return_start_x + (return_end_x - return_start_x) * ease
+
+            _draw_banner(bx, 200 + bf)
+            _draw_floaters(200 + bf, amp_scale=0.7)
+            _play_banner_music(200 + bf, melody_idx)
+
+            screen.update()
+            # 越接近中心越慢
+            if abs(bx) < half_w * 0.3:
+                time.sleep(0.10)
+            elif abs(bx) < half_w * 0.7:
+                time.sleep(0.08)
+            else:
+                time.sleep(0.055)
+
+        # Phase C3: 定格，祝福语居中 + 星星继续闪烁，数字球缓漂
+        if synth and note_map:
+            for ch in range(5):
+                for midi_n in range(21, 109):
+                    synth.noteoff(ch, midi_n)
+            root = note_map[0][0]
+            synth.noteon(0, root, 28)
+            synth.noteon(2, root + 7, 20)
+            synth.noteon(3, root + 4, 14)
+
+        for bf in range(75):
+            if state["quit"]:
+                break
+            bless_t.clear()
+            div_t.clear()
+            _draw_banner(0.0, 320 + bf)
+            _draw_floaters(320 + bf, amp_scale=0.25)
+            screen.update()
+            time.sleep(0.06)
+
+        if synth:
+            synth.delete()
+
+        screen.update()
+
+    # --- 结尾 ---
+    if fireworks and not state["quit"]:
+        _do_fireworks_finale()
+    elif synth and not state["quit"]:
+        # 渐弱尾声
         for event in ringing_events:
             for ch, n in event:
                 synth.noteoff(ch, n)
         ringing_events.clear()
 
-        # 和声渐隐：三声部同时响起，让混响自然带走声音
-        root = note_map[0][0]  # 调式根音
-        synth.noteon(0, root, 30)       # 钢琴 根音
-        synth.noteon(2, root + 7, 22)   # 竖琴 纯五度
-        synth.noteon(3, root + 4, 15)   # 弦乐 大三度
+        root = note_map[0][0]
+        synth.noteon(0, root, 30)
+        synth.noteon(2, root + 7, 22)
+        synth.noteon(3, root + 4, 15)
 
-        # 关闭低音铺底，只留终止和声
         if bass_note[0] is not None:
             synth.noteoff(4, bass_note[0])
             bass_note[0] = None
 
-        # 不主动 noteoff，等自然衰减消散
         time.sleep(2.0)
         synth.delete()
     elif synth:
@@ -753,6 +1501,12 @@ def parse_args():
         default=False,
         help="以暂停状态启动，按空格开始"
     )
+    parser.add_argument(
+        "--fireworks",
+        action="store_true",
+        default=False,
+        help="螺旋完成后播放烟花尾声"
+    )
     return parser.parse_args()
 
 
@@ -767,4 +1521,4 @@ if __name__ == "__main__":
         print("错误: 起始数字必须大于等于1")
         sys.exit(1)
 
-    draw_ulam_spiral(args.count, args.size, args.start, args.sound, args.paused)
+    draw_ulam_spiral(args.count, args.size, args.start, args.sound, args.paused, args.fireworks)
