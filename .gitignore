@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Large SoundFont files (download separately)
+*.sf2
+*.sf3
+
+# Test scripts
+sound_test.py
